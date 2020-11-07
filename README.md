@@ -1,1 +1,1 @@
-# E-Commerce-Website
+# Online Merchandise Store Website
