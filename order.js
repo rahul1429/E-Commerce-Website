@@ -1,38 +1,54 @@
-const mongoose = require("mongoose");
-const { ObjectId } = mongoose.Schema;
+const express = require("express");
+const router = express.Router();
+const { isSignedIn, isAuthenticated, isAdmin } = require("../controllers/auth");
+const { getUserById, pushOrderInPurchaseList } = require("../controllers/user");
+const { updateStock, getAllProducts } = require("../controllers/product");
 
-const ProductCartSchema = new mongoose.Schema({
-  product: {
-    type: ObjectId,
-    ref: "Product",
-  },
-  name: String,
-  count: Number,
-  price: Number,
-});
+const {
+  getOrderById,
+  createOrder,
+  getAllOrders,
+  getOrderStatus,
+  updateStatus,
+} = require("../controllers/order");
 
-const ProductCart = mongoose.model("ProductCart", ProductCartSchema);
+//params
+router.param("userId", getUserById);
+router.param("orderId", getOrderById);
 
-const OrderSchema = new mongoose.Schema(
-  {
-    products: [ProductCartSchema],
-    transaction_id: {},
-    amount: { type: Number },
-    address: String,
-    status: {
-      type: String,
-      default: "Received",
-      enum: ["Processing", "Delivered", "Shipped", "Cancelled", "Received"],
-    },
-    updated: Date,
-    user: {
-      type: ObjectId,
-      ref: "User",
-    },
-  },
-  { timestamps: true }
+//Actual routes
+//create route
+router.post(
+  "/order/create/:userId",
+  isSignedIn,
+  isAuthenticated,
+  pushOrderInPurchaseList,
+  updateStock,
+  createOrder
+);
+//show all orders
+router.get(
+  "/order/all/:userId",
+  isSignedIn,
+  isAuthenticated,
+  isAdmin,
+  getAllOrders
+);
+//status of order
+router.get(
+  "/order/status/:userId",
+  isSignedIn,
+  isAuthenticated,
+  isAdmin,
+  getOrderStatus
+);
+//order update request
+router.put(
+  "/order/:orderId/status/:userId",
+  isSignedIn,
+  isAuthenticated,
+  isAdmin,
+  updateStatus
 );
 
-const Order = mongoose.model("Order", OrderSchema);
-
-module.exports = { Order, ProductCart };
+module.exports = router;
