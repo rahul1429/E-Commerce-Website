@@ -1,38 +1,60 @@
-const mongoose = require("mongoose");
-const { ObjectId } = mongoose.Schema;
+const { Order, ProductCart } = require("../models/order");
 
-const ProductCartSchema = new mongoose.Schema({
-  product: {
-    type: ObjectId,
-    ref: "Product",
-  },
-  name: String,
-  count: Number,
-  price: Number,
-});
+exports.getOrderById = (req, res, next, id) => {
+  Order.findById(id)
+    .populate("products.product", "name price")
+    .exec((err, order) => {
+      if (err) {
+        return res.status(400).json({
+          error: "NO Order Found in DB",
+        });
+      }
+      req.order = order;
+      next();
+    });
+};
 
-const ProductCart = mongoose.model("ProductCart", ProductCartSchema);
+exports.createOrder = (req, res) => {
+  req.body.order.user = req.profile;
+  const order = new Order(req.body.order);
+  order.save((err, order) => {
+    if (err) {
+      return res.status(400).json({
+        error: "Failed to save  order in DB",
+      });
+    }
+    res.json(order);
+  });
+};
 
-const OrderSchema = new mongoose.Schema(
-  {
-    products: [ProductCartSchema],
-    transaction_id: {},
-    amount: { type: Number },
-    address: String,
-    status: {
-      type: String,
-      default: "Received",
-      enum: ["Processing", "Delivered", "Shipped", "Cancelled", "Received"],
-    },
-    updated: Date,
-    user: {
-      type: ObjectId,
-      ref: "User",
-    },
-  },
-  { timestamps: true }
-);
+exports.getAllOrders = (req, res) => {
+  Order.find()
+    .populate("user", "_id name")
+    .exec((err, orders) => {
+      if (err) {
+        return res.status(400).json({
+          error: "NO orders found in DB",
+        });
+      }
+      res.json(orders);
+    });
+};
 
-const Order = mongoose.model("Order", OrderSchema);
+exports.getOrderStatus = (req, res) => {
+  res.json(Order.schema.path("status").enumValues);
+};
 
-module.exports = { Order, ProductCart };
+exports.updateStatus = (req, res) => {
+  Order.update(
+    { _id: req.body.orderId },
+    { $set: { status: req.body.status } },
+    (err, order) => {
+      if (err) {
+        return res.status(400).json({
+          error: "Cannot Update Order in DB",
+        });
+      }
+      res.json(order);
+    }
+  );
+};

@@ -1,74 +1,81 @@
-var mongoose = require("mongoose");
-const crypto = require("crypto");
-const uuidv1 = require("uuid/v1");
+const User = require("../models/user");
+const Order = require("../models/order");
 
-var userSchema = new mongoose.Schema(
-  {
-    name: {
-      type: String,
-      required: true,
-      maxlength: 32,
-      trim: true,
-    },
-    lastname: {
-      type: String,
-      maxlength: 32,
-      trim: true,
-    },
-    email: {
-      type: String,
-      trim: true,
-      required: true,
-      unique: true,
-    },
-    userinfo: {
-      type: String,
-      trim: true,
-    },
-    encry_password: {
-      type: String,
-      required: true,
-    },
-    salt: String,
-    role: {
-      type: Number,
-      default: 0,
-    },
-    purchases: {
-      type: Array,
-      default: [],
-    },
-  },
-  { timestamps: true }
-);
-
-userSchema
-  .virtual("password")
-  .set(function (password) {
-    this._password = password;
-    this.salt = uuidv1();
-    this.encry_password = this.securePassword(password);
-  })
-  .get(function () {
-    return this._password;
-  });
-
-userSchema.methods = {
-  autheticate: function (plainpassword) {
-    return this.securePassword(plainpassword) === this.encry_password;
-  },
-
-  securePassword: function (plainpassword) {
-    if (!plainpassword) return "";
-    try {
-      return crypto
-        .createHmac("sha256", this.salt)
-        .update(plainpassword)
-        .digest("hex");
-    } catch (err) {
-      return "";
+exports.getUserById = (req, res, next, id) => {
+  User.findById(id).exec((err, user) => {
+    if (err || !user) {
+      return res.status(400).json({
+        error: "No user was found in DB",
+      });
     }
-  },
+    req.profile = user;
+    next();
+  });
 };
 
-module.exports = mongoose.model("User", userSchema);
+exports.getUser = (req, res) => {
+  req.profile.salt = undefined;
+  req.profile.encry_password = undefined;
+  return res.json(req.profile);
+};
+
+exports.updateUser = (req, res) => {
+  User.findByIdAndUpdate(
+    { _id: req.profile._id },
+    { $set: req.body },
+    { new: true, useFindAndModify: false },
+    (err, user) => {
+      if (err) {
+        return res.status(400).json({
+          error: "You are not authorized to update this user",
+        });
+      }
+      user.salt = undefined;
+      user.encry_password = undefined;
+      res.json(user);
+    }
+  );
+};
+
+exports.userPurchaseList = (req, res) => {
+  Order.find({ user: req.profile._id })
+    .populate("user", "_id name")
+    .exec((err, order) => {
+      if (err) {
+        return res.status(400).json({
+          error: "No Order in this account",
+        });
+      }
+      return res.json(order);
+    });
+};
+
+exports.pushOrderInPurchaseList = (req, res, next) => {
+  let purchases = [];
+  req.body.order.products.forEach((product) => {
+    purchases.push({
+      _id: product._id,
+      name: product.name,
+      description: product.description,
+      category: product.category,
+      quantity: product.quantity,
+      amount: req.body.order.amount,
+      transaction_id: req.body.order.transaction_id,
+    });
+  });
+
+  //store thi in DB
+  User.findOneAndUpdate(
+    { _id: req.profile._id },
+    { $push: { purchases: purchases } },
+    { new: true },
+    (err, purchases) => {
+      if (err) {
+        return res.status(400).json({
+          error: "Unable to save purchase list",
+        });
+      }
+      next();
+    }
+  );
+};
